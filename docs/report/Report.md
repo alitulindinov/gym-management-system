@@ -6,7 +6,7 @@ author:
 date: "November 2026"
 ---
 
-**Repository:** https://github.com/<your-team>/gym-management-system
+**Repository:** https://github.com/alitulindinov/gym-management-system
 
 **Language:** Java 17+ (console application, no external libraries)
 
