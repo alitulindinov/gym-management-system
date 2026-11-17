@@ -7,7 +7,7 @@ A console application in Java that manages gym members, memberships, payments an
 
 | Student | Pattern 1 | Pattern 2 | Type |
 |---------|-----------|-----------|------|
-| Kaisar  | Singleton (`singleton`) | Factory Method (`factory`) | Creational |
+| Kaisar  | Builder (`builder`) | Factory Method (`factory`) | Creational |
 | Darkhan | Decorator (`decorator`) | Adapter (`adapter`) | Structural |
 | Ali     | Observer (`observer`) | Strategy (`strategy`) | Behavioral |
 
@@ -16,8 +16,10 @@ A console application in Java that manages gym members, memberships, payments an
 ```
 src/
 ├── Main.java                         <- the only class outside pattern packages, tests everything
-├── singleton/
-│   └── GymDatabase.java              <- one shared database of members and classes
+├── builder/
+│   ├── product/                      <- TrainingPlan (the object we build)
+│   ├── builders/                     <- TrainingPlanBuilder + GymTrainingPlanBuilder
+│   └── director/                     <- PlanDirector (ready-made plans)
 ├── factory/
 │   ├── product/                      <- Membership + Basic / Premium / Vip
 │   └── creator/                      <- MembershipFactory + 3 concrete factories
@@ -42,8 +44,8 @@ src/
 2. **Decorator** adds extras to it (personal trainer, sauna, locker) and changes the price.
 3. **Strategy** calculates the final price (regular, student, long-term discount).
 4. **Adapter** lets the member pay with Kaspi or a foreign card through one `PaymentProcessor` interface.
-5. **Singleton** `GymDatabase` stores all members and classes.
-6. **Observer** sends notifications to members and the front desk when a class time changes or a class is cancelled.
+5. **Observer** sends notifications to members and the front desk when a class time changes or a class is cancelled.
+6. **Builder** creates a personal training plan for the member step by step (goal, days, exercises, trainer, nutrition).
 
 ## How to run
 
@@ -58,10 +60,10 @@ Or open the folder in IntelliJ IDEA, mark `src` as Sources Root and run `Main`.
 
 ## Principles used
 
-- **SRP** - every class has one job (e.g. `PriceCalculator` only calculates, `GymDatabase` only stores).
+- **SRP** - every class has one job (e.g. `PriceCalculator` only calculates, `PlanDirector` only knows the order of steps).
 - **OCP** - a new discount or add-on is a new class, existing code is not changed.
 - **LSP** - any decorator can be used where a `Membership` is expected.
 - **ISP** - small interfaces (`GymObserver` has one method, `PaymentProcessor` has one method).
 - **DIP** - `Main` and `PriceCalculator` depend on interfaces (`PaymentProcessor`, `PricingStrategy`), not on concrete classes.
-- **DRY** - common forwarding code is written once in `MembershipDecorator`.
+- **DRY** - common forwarding code is written once in `MembershipDecorator`, ready-made plans once in `PlanDirector`.
 - **KISS** - plain Java, no frameworks, console output.

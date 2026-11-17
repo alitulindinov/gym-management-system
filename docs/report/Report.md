@@ -12,7 +12,7 @@ date: "November 2026"
 
 | Student | Pattern 1 | Pattern 2 | Pattern type |
 |---|---|---|---|
-| Kaisar | Singleton | Factory Method | Creational |
+| Kaisar | Builder | Factory Method | Creational |
 | Darkhan | Decorator | Adapter | Structural |
 | Ali | Observer | Strategy | Behavioral |
 
@@ -22,7 +22,7 @@ A gym has to manage many things at the same time: members and their memberships,
 
 The goal of our project is to build a small **Gym Management System** in Java and to show how classic GoF design patterns help to keep such a system simple, flexible and easy to extend. According to the project requirements, every team member implemented two patterns, and together the team integrated **six distinct patterns** into one working program:
 
-- **Creational:** Singleton, Factory Method
+- **Creational:** Builder, Factory Method
 - **Structural:** Decorator, Adapter
 - **Behavioral:** Observer, Strategy
 
@@ -37,8 +37,11 @@ Each pattern has its own package, and inside the package the sub-folders follow 
 ```
 src/
 ├── Main.java  (only class outside packages)
-├── singleton/
-│   └── GymDatabase.java
+├── builder/
+│   ├── product/   TrainingPlan
+│   ├── builders/  TrainingPlanBuilder,
+│   │              GymTrainingPlanBuilder
+│   └── director/  PlanDirector
 ├── factory/
 │   ├── product/   Membership + Basic/Premium/Vip
 │   └── creator/   MembershipFactory + 3 factories
@@ -69,88 +72,185 @@ The typical flow of registering a new member is:
 2. **Decorator** wraps this membership with extra services; each wrapper adds to the description and the price.
 3. **Strategy** calculates the final price for N months (regular, student or long-term discount).
 4. **Adapter** lets the member pay with Kaspi or with a foreign card through one common `PaymentProcessor` interface.
-5. **Singleton** `GymDatabase` stores the member (and the classes) — there is only one database in the whole program.
+5. **Builder**: a `PlanDirector` with a `GymTrainingPlanBuilder` creates a personal training plan for the new member step by step.
 6. **Observer**: the member subscribes to a group class (`GymClass`); when the time changes or the class is cancelled, all subscribers get a notification.
 
-The patterns interact directly: decorators wrap objects created by the factory, the price calculator works with decorated memberships, `Member` (an observer) holds a `Membership`, and the singleton stores both members and classes.
+The patterns interact directly: decorators wrap objects created by the factory, the price calculator works with decorated memberships, `Member` (an observer) holds a `Membership`, and the training plan is built for a member who was created with the factory.
 
-## 2.3 Singleton — GymDatabase (Kaisar)
+## 2.3 Builder — training plans (Kaisar)
 
-**Problem:** all parts of the program must work with the same list of members and classes. If somebody creates a second database, data will be lost or duplicated.
+**Problem:** a training plan has many fields: member, goal, days per week, duration, a list of exercises, and optional parts — a personal trainer and a nutrition plan. A constructor with 7 parameters is hard to read (`new TrainingPlan("Dana", "Muscle gain", 5, 12, list, null, true)` — what is `null`, what is `true`?), and different plans need different optional parts.
 
-**Solution:** `GymDatabase` has a `private` constructor, a `private static` field `instance` and a public static method `getInstance()`, which creates the object only on the first call. The method is `synchronized` so it is also safe with several threads.
+**Solution:** the object is built step by step. `TrainingPlan` is the *product*. `TrainingPlanBuilder` is the *builder* interface with one method per step; every step returns the builder, so the calls can be chained. `GymTrainingPlanBuilder` is the *concrete builder*: it collects the parts, checks them in `build()` (member name is required, days per week 1–7) and then resets itself, so the same builder can be reused. `PlanDirector` is the *director*: it knows the order of steps for ready-made plans (weight loss, muscle gain). A plan can also be built by hand without the director, using only the steps that are needed.
 
-![Singleton UML](../uml/uml_singleton.png){width=45%}
+![Builder UML](../uml/uml_builder.png){width=80%}
 
-*File: `src/singleton/GymDatabase.java`*
+*File: `src/builder/builders/TrainingPlanBuilder.java`*
 
 ```java
-package singleton;
+package builder.builders;
 
-import observer.subject.GymClass;
-import observer.subscriber.Member;
+import builder.product.TrainingPlan;
+
+/**
+ * Builder interface - declares the steps to build a TrainingPlan.
+ * Every step returns the builder itself, so calls can be chained.
+ */
+public interface TrainingPlanBuilder {
+
+    TrainingPlanBuilder forMember(String memberName);
+
+    TrainingPlanBuilder goal(String goal);
+
+    TrainingPlanBuilder daysPerWeek(int days);
+
+    TrainingPlanBuilder durationWeeks(int weeks);
+
+    TrainingPlanBuilder addExercise(String exercise);
+
+    TrainingPlanBuilder withTrainer(String trainer);
+
+    TrainingPlanBuilder withNutritionPlan();
+
+    TrainingPlan build();
+}
+```
+
+*File: `src/builder/builders/GymTrainingPlanBuilder.java`*
+
+```java
+package builder.builders;
+
+import builder.product.TrainingPlan;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Singleton pattern.
- * The gym has only one database, so only one instance of this class can exist.
+ * Concrete builder - collects the parts and creates the TrainingPlan in build().
  */
-public class GymDatabase {
+public class GymTrainingPlanBuilder implements TrainingPlanBuilder {
 
-    private static GymDatabase instance;
+    private String memberName;
+    private String goal = "General fitness";
+    private int daysPerWeek = 3;
+    private int durationWeeks = 4;
+    private List<String> exercises = new ArrayList<>();
+    private String trainer;
+    private boolean nutritionPlan;
 
-    private final List<Member> members = new ArrayList<>();
-    private final List<GymClass> classes = new ArrayList<>();
-
-    // private constructor - nobody can call "new GymDatabase()" from outside
-    private GymDatabase() {
-        System.out.println("[Singleton] GymDatabase created");
+    @Override
+    public TrainingPlanBuilder forMember(String memberName) {
+        this.memberName = memberName;
+        return this;
     }
 
-    public static synchronized GymDatabase getInstance() {
-        if (instance == null) {
-            instance = new GymDatabase();
+    @Override
+    public TrainingPlanBuilder goal(String goal) {
+        this.goal = goal;
+        return this;
+    }
+
+    @Override
+    public TrainingPlanBuilder daysPerWeek(int days) {
+        this.daysPerWeek = days;
+        return this;
+    }
+
+    @Override
+    public TrainingPlanBuilder durationWeeks(int weeks) {
+        this.durationWeeks = weeks;
+        return this;
+    }
+
+    @Override
+    public TrainingPlanBuilder addExercise(String exercise) {
+        exercises.add(exercise);
+        return this;
+    }
+
+    @Override
+    public TrainingPlanBuilder withTrainer(String trainer) {
+        this.trainer = trainer;
+        return this;
+    }
+
+    @Override
+    public TrainingPlanBuilder withNutritionPlan() {
+        this.nutritionPlan = true;
+        return this;
+    }
+
+    @Override
+    public TrainingPlan build() {
+        if (memberName == null || memberName.isEmpty()) {
+            throw new IllegalStateException("Member name is required");
         }
-        return instance;
-    }
-
-    public void addMember(Member member) {
-        members.add(member);
-    }
-
-    public void addClass(GymClass gymClass) {
-        classes.add(gymClass);
-    }
-
-    public Member findMemberByName(String name) {
-        for (Member member : members) {
-            if (member.getName().equalsIgnoreCase(name)) {
-                return member;
-            }
+        if (daysPerWeek < 1 || daysPerWeek > 7) {
+            throw new IllegalStateException("Days per week must be from 1 to 7");
         }
-        return null;
+        TrainingPlan plan = new TrainingPlan(memberName, goal, daysPerWeek, durationWeeks,
+                exercises, trainer, nutritionPlan);
+        reset(); // the same builder can be used again for the next plan
+        return plan;
     }
 
-    public List<Member> getMembers() {
-        return new ArrayList<>(members);
+    private void reset() {
+        memberName = null;
+        goal = "General fitness";
+        daysPerWeek = 3;
+        durationWeeks = 4;
+        exercises = new ArrayList<>();
+        trainer = null;
+        nutritionPlan = false;
+    }
+}
+```
+
+*File: `src/builder/director/PlanDirector.java`*
+
+```java
+package builder.director;
+
+import builder.builders.TrainingPlanBuilder;
+import builder.product.TrainingPlan;
+
+/**
+ * Director of the Builder pattern.
+ * It knows the ORDER of steps for ready-made plans,
+ * the builder knows HOW to build each part.
+ */
+public class PlanDirector {
+
+    private final TrainingPlanBuilder builder;
+
+    public PlanDirector(TrainingPlanBuilder builder) {
+        this.builder = builder;
     }
 
-    public List<GymClass> getClasses() {
-        return new ArrayList<>(classes);
+    public TrainingPlan makeWeightLossPlan(String memberName) {
+        return builder.forMember(memberName)
+                .goal("Weight loss")
+                .daysPerWeek(4)
+                .durationWeeks(8)
+                .addExercise("Treadmill 30 min")
+                .addExercise("Cycling")
+                .addExercise("Plank")
+                .withNutritionPlan()
+                .build();
     }
 
-    public void printReport() {
-        System.out.println("---- Gym report ----");
-        System.out.println("Members: " + members.size());
-        for (Member member : members) {
-            System.out.println("  " + member);
-        }
-        System.out.println("Classes: " + classes.size());
-        for (GymClass gymClass : classes) {
-            System.out.println("  " + gymClass);
-        }
+    public TrainingPlan makeMuscleGainPlan(String memberName, String trainer) {
+        return builder.forMember(memberName)
+                .goal("Muscle gain")
+                .daysPerWeek(5)
+                .durationWeeks(12)
+                .addExercise("Bench press")
+                .addExercise("Squats")
+                .addExercise("Deadlift")
+                .withTrainer(trainer)
+                .withNutritionPlan()
+                .build();
     }
 }
 ```
@@ -482,7 +582,7 @@ public class LongTermPricing implements PricingStrategy {
 
 ## 2.9 Main — testing everything
 
-`Main` is the only class outside the pattern packages. It tests each pattern separately (sections 1–6) and then runs a full scenario (section 7) where a new member gets a VIP membership from the factory, adds a personal trainer with a decorator, gets a long-term price from the strategy, pays through the Kaspi adapter, is saved in the singleton database and receives a notification from the observer.
+`Main` is the only class outside the pattern packages. It tests each pattern separately (sections 1–6) and then runs a full scenario (section 7) where a new member gets a VIP membership from the factory, adds a personal trainer with a decorator, gets a long-term price from the strategy, pays through the Kaspi adapter, receives a notification from the observer and gets a personal training plan from the builder.
 
 *File: `src/Main.java`*
 
@@ -492,6 +592,10 @@ import adapter.adaptee.KaspiApi;
 import adapter.adapters.ForeignCardPaymentAdapter;
 import adapter.adapters.KaspiPaymentAdapter;
 import adapter.target.PaymentProcessor;
+import builder.builders.GymTrainingPlanBuilder;
+import builder.builders.TrainingPlanBuilder;
+import builder.director.PlanDirector;
+import builder.product.TrainingPlan;
 import decorator.addon.LockerDecorator;
 import decorator.addon.PersonalTrainerDecorator;
 import decorator.addon.SaunaDecorator;
@@ -503,7 +607,6 @@ import factory.product.Membership;
 import observer.subject.GymClass;
 import observer.subscriber.FrontDeskScreen;
 import observer.subscriber.Member;
-import singleton.GymDatabase;
 import strategy.context.PriceCalculator;
 import strategy.pricing.LongTermPricing;
 import strategy.pricing.RegularPricing;
@@ -521,7 +624,7 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("===== GYM MANAGEMENT SYSTEM =====");
 
-        testSingleton();
+        testBuilder();
         testFactoryMethod();
         testDecorator();
         testStrategy();
@@ -532,11 +635,28 @@ public class Main {
 
     // ---------- Kaisar: creational patterns ----------
 
-    private static void testSingleton() {
-        printTitle("1. SINGLETON (creational) - GymDatabase");
-        GymDatabase db1 = GymDatabase.getInstance();
-        GymDatabase db2 = GymDatabase.getInstance();
-        System.out.println("db1 == db2 ? " + (db1 == db2));
+    private static void testBuilder() {
+        printTitle("1. BUILDER (creational) - training plans");
+        TrainingPlanBuilder builder = new GymTrainingPlanBuilder();
+
+        // building step by step by hand, only the parts we need
+        TrainingPlan custom = builder.forMember("Asel")
+                .goal("Flexibility")
+                .daysPerWeek(2)
+                .addExercise("Stretching")
+                .addExercise("Yoga")
+                .build();
+        System.out.println(custom);
+
+        // director builds ready-made plans with the same builder
+        PlanDirector director = new PlanDirector(builder);
+        System.out.println(director.makeWeightLossPlan("Bauyrzhan"));
+
+        try {
+            builder.daysPerWeek(3).build(); // no member name
+        } catch (IllegalStateException e) {
+            System.out.println("Validation works: " + e.getMessage());
+        }
     }
 
     private static void testFactoryMethod() {
@@ -611,16 +731,12 @@ public class Main {
 
     private static void fullScenario() {
         printTitle("7. FULL SCENARIO - all 6 patterns together");
-        GymDatabase db = GymDatabase.getInstance();                     // Singleton
-
         Membership membership = new VipMembershipFactory().issueMembership(); // Factory Method
         membership = new PersonalTrainerDecorator(membership);          // Decorator
         Member dana = new Member("Dana", "+77015556677", membership);
-        db.addMember(dana);
 
         Member erlan = new Member("Erlan", "+77019998877",
                 new SaunaDecorator(new BasicMembershipFactory().issueMembership()));
-        db.addMember(erlan);
 
         PriceCalculator calculator = new PriceCalculator(new LongTermPricing()); // Strategy
         double total = calculator.calculateTotal(dana.getMembership(), 6);
@@ -634,12 +750,13 @@ public class Main {
         GymClass yoga = new GymClass("Yoga", "Coach Madina", "09:00");  // Observer
         yoga.subscribe(dana);
         yoga.subscribe(erlan);
-        db.addClass(yoga);
         yoga.changeTime("10:00");
 
+        PlanDirector director = new PlanDirector(new GymTrainingPlanBuilder()); // Builder
+        TrainingPlan plan = director.makeMuscleGainPlan(dana.getName(), "Coach Arman");
         System.out.println();
-        db.printReport();
-        System.out.println("Find 'erlan' in database: " + db.findMemberByName("erlan").getName());
+        System.out.println(dana);
+        System.out.println(plan);
     }
 
     // ---------- helpers ----------
@@ -664,7 +781,7 @@ public class Main {
 
 ## 2.11 Clean code, SOLID, KISS, DRY
 
-- **S — Single Responsibility:** every class has one job: `GymDatabase` stores data, `PriceCalculator` calculates price, adapters only translate calls, decorators only add one service.
+- **S — Single Responsibility:** every class has one job: `TrainingPlan` only holds plan data, `PlanDirector` only knows the order of steps, `PriceCalculator` calculates price, adapters only translate calls, decorators only add one service.
 - **O — Open/Closed:** new membership type, add-on, discount, payment system or notification receiver = a new class; existing classes are not modified.
 - **L — Liskov Substitution:** any decorator or any concrete membership can be used where `Membership` is expected; any adapter where `PaymentProcessor` is expected.
 - **I — Interface Segregation:** interfaces are small: `GymObserver` and `PaymentProcessor` have one method each, `PricingStrategy` has two.
@@ -678,22 +795,27 @@ The project was developed in a shared Git repository; each student committed his
 
 | Commit | Author | Date | Message |
 |---|---|---|---|
-| `2f240a4` | Kaisar | 2026-11-02 | Initial commit: project structure, README, gitignore |
-| `ca55cfc` | Kaisar | 2026-11-03 | Add Membership product classes for Factory Method |
-| `6ba25db` | Kaisar | 2026-11-04 | Add membership factories (Factory Method creators) |
-| `c16a08c` | Ali | 2026-11-05 | Add Observer: GymClass subject, Member and FrontDeskScreen observers |
-| `4392452` | Kaisar | 2026-11-06 | Add GymDatabase singleton and Main with creational tests |
-| `e3cc7f2` | Darkhan | 2026-11-07 | Add base MembershipDecorator |
-| `1208e83` | Darkhan | 2026-11-08 | Add trainer, sauna and locker decorators |
-| `1e7e473` | Darkhan | 2026-11-09 | Add PaymentProcessor target and third-party payment APIs |
-| `6573f9c` | Darkhan | 2026-11-10 | Add Kaspi and card payment adapters, test structural patterns in Main |
-| `b376991` | Ali | 2026-11-11 | Add pricing strategies (regular, student, long-term) |
-| `03519b2` | Ali | 2026-11-12 | Add PriceCalculator context for Strategy |
-| `adf646c` | Ali | 2026-11-13 | Test behavioral patterns and add full scenario with all 6 patterns |
+| `0c583ff` | Kaisar | 2026-11-02 | Initial commit: project structure, README, gitignore |
+| `4c0905f` | Kaisar | 2026-11-03 | Add Membership product classes for Factory Method |
+| `11bc0ea` | Kaisar | 2026-11-04 | Add membership factories (Factory Method creators) |
+| `2f89055` | Ali | 2026-11-05 | Add Observer: GymClass subject, Member and FrontDeskScreen observers |
+| `409b085` | Kaisar | 2026-11-06 | Add GymDatabase singleton and Main with creational tests |
+| `338bddf` | Darkhan | 2026-11-07 | Add base MembershipDecorator |
+| `b39d035` | Darkhan | 2026-11-08 | Add trainer, sauna and locker decorators |
+| `6bfa7df` | Darkhan | 2026-11-09 | Add PaymentProcessor target and third-party payment APIs |
+| `e62f0ef` | Darkhan | 2026-11-10 | Add Kaspi and card payment adapters, test structural patterns in Main |
+| `c1e0f37` | Ali | 2026-11-11 | Add pricing strategies (regular, student, long-term) |
+| `b930c0a` | Ali | 2026-11-12 | Add PriceCalculator context for Strategy |
+| `db0c5d9` | Ali | 2026-11-13 | Test behavioral patterns and add full scenario with all 6 patterns |
+| `ca11b91` | Darkhan | 2026-11-14 | Add UML class diagrams for all patterns |
+| `f0c405c` | Ali | 2026-11-14 | Add screenshots of program output |
+| `ed8b56e` | Kaisar | 2026-11-14 | Add final project report (PDF, DOCX) |
+| `e270e7f` | Ali | 2026-11-15 | Fix repository URL in project documentation |
+| (this commit) | Kaisar | 2026-11-17 | Replace Singleton with Builder pattern |
 
 # 3. Conclusion
 
-We built a working Gym Management System that integrates six GoF design patterns into one program: Singleton and Factory Method (creational), Decorator and Adapter (structural), Observer and Strategy (behavioral). Each student implemented two patterns, and the patterns cooperate in one full scenario — from creating a membership to paying for it and receiving schedule notifications.
+We built a working Gym Management System that integrates six GoF design patterns into one program: Builder and Factory Method (creational), Decorator and Adapter (structural), Observer and Strategy (behavioral). Each student implemented two patterns, and the patterns cooperate in one full scenario — from creating a membership to paying for it and receiving schedule notifications.
 
 The main lesson is that patterns are not just theory: they removed long `if/switch` blocks, prevented class explosion, let us hide third-party APIs behind one interface and made the code open for extension. Thanks to SOLID, DRY and KISS the code stays short and easy to explain.
 
@@ -701,6 +823,6 @@ The main lesson is that patterns are not just theory: they removed long `if/swit
 
 - Save data to a real database (PostgreSQL) or files instead of in-memory lists.
 - Add a GUI (JavaFX) or a REST API (Spring Boot) instead of the console.
-- Add more patterns: **Builder** for complex training plans, **Facade** for a single “register member” service, **Command** for undo of bookings, **State** for membership status (active, frozen, expired).
+- Add more patterns: **Singleton** for one shared gym database, **Facade** for a single “register member” service, **Command** for undo of bookings, **State** for membership status (active, frozen, expired).
 - Real integrations: Kaspi Pay / Stripe APIs, SMS and Telegram notifications.
 - Unit tests with JUnit for every pattern.

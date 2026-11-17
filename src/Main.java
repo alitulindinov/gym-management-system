@@ -3,6 +3,10 @@ import adapter.adaptee.KaspiApi;
 import adapter.adapters.ForeignCardPaymentAdapter;
 import adapter.adapters.KaspiPaymentAdapter;
 import adapter.target.PaymentProcessor;
+import builder.builders.GymTrainingPlanBuilder;
+import builder.builders.TrainingPlanBuilder;
+import builder.director.PlanDirector;
+import builder.product.TrainingPlan;
 import decorator.addon.LockerDecorator;
 import decorator.addon.PersonalTrainerDecorator;
 import decorator.addon.SaunaDecorator;
@@ -14,7 +18,6 @@ import factory.product.Membership;
 import observer.subject.GymClass;
 import observer.subscriber.FrontDeskScreen;
 import observer.subscriber.Member;
-import singleton.GymDatabase;
 import strategy.context.PriceCalculator;
 import strategy.pricing.LongTermPricing;
 import strategy.pricing.RegularPricing;
@@ -32,7 +35,7 @@ public class Main {
     public static void main(String[] args) {
         System.out.println("===== GYM MANAGEMENT SYSTEM =====");
 
-        testSingleton();
+        testBuilder();
         testFactoryMethod();
         testDecorator();
         testStrategy();
@@ -43,11 +46,28 @@ public class Main {
 
     // ---------- Kaisar: creational patterns ----------
 
-    private static void testSingleton() {
-        printTitle("1. SINGLETON (creational) - GymDatabase");
-        GymDatabase db1 = GymDatabase.getInstance();
-        GymDatabase db2 = GymDatabase.getInstance();
-        System.out.println("db1 == db2 ? " + (db1 == db2));
+    private static void testBuilder() {
+        printTitle("1. BUILDER (creational) - training plans");
+        TrainingPlanBuilder builder = new GymTrainingPlanBuilder();
+
+        // building step by step by hand, only the parts we need
+        TrainingPlan custom = builder.forMember("Asel")
+                .goal("Flexibility")
+                .daysPerWeek(2)
+                .addExercise("Stretching")
+                .addExercise("Yoga")
+                .build();
+        System.out.println(custom);
+
+        // director builds ready-made plans with the same builder
+        PlanDirector director = new PlanDirector(builder);
+        System.out.println(director.makeWeightLossPlan("Bauyrzhan"));
+
+        try {
+            builder.daysPerWeek(3).build(); // no member name
+        } catch (IllegalStateException e) {
+            System.out.println("Validation works: " + e.getMessage());
+        }
     }
 
     private static void testFactoryMethod() {
@@ -122,16 +142,12 @@ public class Main {
 
     private static void fullScenario() {
         printTitle("7. FULL SCENARIO - all 6 patterns together");
-        GymDatabase db = GymDatabase.getInstance();                     // Singleton
-
         Membership membership = new VipMembershipFactory().issueMembership(); // Factory Method
         membership = new PersonalTrainerDecorator(membership);          // Decorator
         Member dana = new Member("Dana", "+77015556677", membership);
-        db.addMember(dana);
 
         Member erlan = new Member("Erlan", "+77019998877",
                 new SaunaDecorator(new BasicMembershipFactory().issueMembership()));
-        db.addMember(erlan);
 
         PriceCalculator calculator = new PriceCalculator(new LongTermPricing()); // Strategy
         double total = calculator.calculateTotal(dana.getMembership(), 6);
@@ -145,12 +161,13 @@ public class Main {
         GymClass yoga = new GymClass("Yoga", "Coach Madina", "09:00");  // Observer
         yoga.subscribe(dana);
         yoga.subscribe(erlan);
-        db.addClass(yoga);
         yoga.changeTime("10:00");
 
+        PlanDirector director = new PlanDirector(new GymTrainingPlanBuilder()); // Builder
+        TrainingPlan plan = director.makeMuscleGainPlan(dana.getName(), "Coach Arman");
         System.out.println();
-        db.printReport();
-        System.out.println("Find 'erlan' in database: " + db.findMemberByName("erlan").getName());
+        System.out.println(dana);
+        System.out.println(plan);
     }
 
     // ---------- helpers ----------
